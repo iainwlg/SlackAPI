@@ -475,32 +475,45 @@ namespace SlackAPI
             return APIRequestWithTokenAsync<PostMessageResponse>(parameters.ToArray());
         }
 
-        public async Task<FileUploadResponse> UploadFileAsync(byte[] fileData, string fileName, string[] channelIds, string title = null, string initialComment = null, bool useAsync = false, string fileType = null)
+        public Task<PostMessageResponse> PostMessageAsync(PostMessageRequest request)
         {
-            Uri target = new Uri(Path.Combine(APIBaseLocation, useAsync ? "files.uploadAsync" : "files.upload"));
+            return APIRequestWithTokenAsync<PostMessageResponse>(RequestSerializer.Serialize(request).ToArray());
+        }
 
-            List<string> parameters = new List<string>();
-            parameters.Add(string.Format("token={0}", APIToken));
+        public async Task<FileUploadResponse> UploadFileAsync(byte[] fileData, string fileName, string[] channelIds, string title = null, string initialComment = null, string fileType = null, string thread_ts = null)
+        {
+            Uri target = new Uri(Path.Combine(APIBaseLocation, "files.upload"));
+
+            List<Tuple<string,string>> parameters = new List<Tuple<string,string>>();
+            parameters.Add(Tuple.Create("token", APIToken));
 
             //File/Content
             if (!string.IsNullOrEmpty(fileType))
-                parameters.Add(string.Format("{0}={1}", "filetype", fileType));
+                parameters.Add(Tuple.Create("filetype", fileType));
 
             if (!string.IsNullOrEmpty(fileName))
-                parameters.Add(string.Format("{0}={1}", "filename", fileName));
+                parameters.Add(Tuple.Create("filename", fileName));
 
             if (!string.IsNullOrEmpty(title))
-                parameters.Add(string.Format("{0}={1}", "title", title));
+                parameters.Add(Tuple.Create("title", title));
 
             if (!string.IsNullOrEmpty(initialComment))
-                parameters.Add(string.Format("{0}={1}", "initial_comment", initialComment));
+                parameters.Add(Tuple.Create("initial_comment", initialComment));
 
-            parameters.Add(string.Format("{0}={1}", "channels", string.Join(",", channelIds)));
+            if(channelIds != null && channelIds.Length > 0)
+                parameters.Add(Tuple.Create("channels", string.Join(",", channelIds)));
+
+            if(!string.IsNullOrEmpty(thread_ts))
+            {
+                parameters.Add(Tuple.Create("thread_ts",thread_ts));
+            }
+
+            var query = string.Join("&", parameters.Select(p => p.Item1 + "=" + WebUtility.UrlEncode(p.Item2)));
 
             using (MultipartFormDataContent form = new MultipartFormDataContent())
             {
                 form.Add(new ByteArrayContent(fileData), "file", fileName);
-                HttpResponseMessage response = PostRequest(string.Format("{0}?{1}", target, string.Join("&", parameters.ToArray())), form);
+                HttpResponseMessage response = PostRequest(target + "?" + query, form);
                 string result = await response.Content.ReadAsStringAsync();
                 return result.Deserialize<FileUploadResponse>();
             }
